@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Play, RotateCcw, Zap, Heart, Trophy, Clock, Star, Volume2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Play, RotateCcw, Zap, Heart, Trophy, Clock, Star, Volume2, Target, Flame, TrendingUp, Gift } from 'lucide-react';
 
 const MemoryChainGame = () => {
   const [gameMode, setGameMode] = useState('menu');
@@ -25,40 +25,148 @@ const MemoryChainGame = () => {
   const [gameStartTime, setGameStartTime] = useState(null);
   const [totalCorrect, setTotalCorrect] = useState(0);
   const [achievements, setAchievements] = useState([]);
+  
+  // New psychological and meta-game states
+  const [dailyChallenge, setDailyChallenge] = useState(null);
+  const [dailyChallengeCompleted, setDailyChallengeCompleted] = useState(false);
+  const [personalBests, setPersonalBests] = useState({});
+  const [sessionStats, setSessionStats] = useState({
+    gamesPlayed: 0,
+    totalScore: 0,
+    perfectRounds: 0,
+    comebacks: 0
+  });
+  const [powerUps, setPowerUps] = useState({
+    slowTime: 2,
+    extraLife: 1,
+    peek: 3
+  });
+  const [activePowerUp, setActivePowerUp] = useState(null);
+  const [multiplier, setMultiplier] = useState(1);
+  const [comboCounter, setComboCounter] = useState(0);
+  const [recentFeedback, setRecentFeedback] = useState('');
+  const [adaptiveDifficulty, setAdaptiveDifficulty] = useState(1.0);
+  const [playerTrends, setPlayerTrends] = useState({
+    strongestMode: '',
+    weakestMode: '',
+    optimalPlayTime: 'afternoon'
+  });
+  const [notifications, setNotifications] = useState([]);
 
-  const letterPool = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-  const numberPool = '0123456789'.split('');
-  const specialPool = '!@#$%^&*'.split('');
-  const wordPools = {
-    short: ['Cat', 'Dog', 'Sun', 'Car', 'Bed', 'Cup', 'Hat', 'Key', 'Pen', 'Box'],
-    medium: ['Chair', 'Phone', 'House', 'Music', 'Water', 'Light', 'Table', 'Plant', 'Clock', 'Book'],
-    long: ['Computer', 'Mountain', 'Elephant', 'Rainbow', 'Basketball', 'Adventure', 'Butterfly', 'Chocolate', 'Yesterday', 'Beautiful']
+  // Enhanced content pools with categories
+  const contentCategories = {
+    letters: {
+      basic: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''),
+      numbers: '0123456789'.split(''),
+      special: '!@#$%^&*'.split(''),
+      mixed: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'.split('')
+    },
+    words: {
+      animals: ['Cat', 'Dog', 'Lion', 'Tiger', 'Eagle', 'Shark', 'Wolf', 'Bear', 'Fox', 'Owl'],
+      colors: ['Red', 'Blue', 'Green', 'Yellow', 'Purple', 'Orange', 'Pink', 'Brown', 'Black', 'White'],
+      food: ['Pizza', 'Burger', 'Cake', 'Apple', 'Bread', 'Cheese', 'Coffee', 'Tea', 'Rice', 'Fish'],
+      tech: ['Computer', 'Phone', 'Internet', 'Software', 'Robot', 'AI', 'Code', 'Data', 'Cloud', 'App'],
+      nature: ['Mountain', 'Ocean', 'Forest', 'River', 'Sky', 'Sun', 'Moon', 'Star', 'Wind', 'Rain'],
+      emotions: ['Happy', 'Sad', 'Angry', 'Calm', 'Excited', 'Peaceful', 'Brave', 'Kind', 'Smart', 'Strong']
+    }
+  };
+
+  const encouragementMessages = [
+    "🔥 You're on fire!", "💪 Incredible focus!", "🎯 Perfect aim!", "⚡ Lightning fast!",
+    "🧠 Brain power activated!", "🌟 Amazing memory!", "🚀 Unstoppable!", "💎 Flawless execution!",
+    "🎪 Mind-blowing!", "🏆 Champion level!", "🎨 Beautiful precision!", "🌈 Spectacular!"
+  ];
+
+  const getTimeBasedGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning, Memory Master! 🌅";
+    if (hour < 18) return "Good afternoon, Brain Champion! ☀️";
+    return "Good evening, Mind Wizard! 🌙";
+  };
+
+  const generateDailyChallenge = () => {
+    const today = new Date().toDateString();
+    const challengeTypes = [
+      { type: 'streak', target: 15, desc: 'Achieve a 15-streak in any mode', reward: 500 },
+      { type: 'perfect', target: 5, desc: 'Complete 5 perfect rounds', reward: 300 },
+      { type: 'level', target: 25, desc: 'Reach level 25 in Letter Chains', reward: 400 },
+      { type: 'speed', target: 30, desc: 'Complete a round in under 30 seconds', reward: 250 }
+    ];
+    
+    const challenge = challengeTypes[Math.floor(Math.random() * challengeTypes.length)];
+    return { ...challenge, date: today, progress: 0 };
+  };
+
+  const usePowerUp = (type) => {
+    if (powerUps[type] <= 0) return;
+    
+    setPowerUps(prev => ({ ...prev, [type]: prev[type] - 1 }));
+    setActivePowerUp(type);
+    
+    if (type === 'extraLife') {
+      setLives(prev => Math.min(5, prev + 1));
+      showFeedback("💚 Extra life granted!");
+    } else if (type === 'slowTime') {
+      showFeedback("⏰ Time slowed down!");
+      setTimeout(() => setActivePowerUp(null), 10000);
+    } else if (type === 'peek') {
+      showFeedback("👁️ Peek activated!");
+      setTimeout(() => setActivePowerUp(null), 3000);
+    }
+  };
+
+  const showFeedback = useCallback((message) => {
+    setRecentFeedback(message);
+    setTimeout(() => setRecentFeedback(''), 2000);
+  }, []);
+
+  const addNotification = (message, type = 'info') => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 4000);
+  };
+
+  const calculateDynamicDifficulty = () => {
+    const recentPerformance = sessionStats.totalScore / (sessionStats.gamesPlayed || 1);
+    if (recentPerformance > 500) return Math.min(1.5, adaptiveDifficulty + 0.1);
+    if (recentPerformance < 200) return Math.max(0.7, adaptiveDifficulty - 0.1);
+    return adaptiveDifficulty;
+  };
+
+  const getVariedContent = (mode, level, category = null) => {
+    if (mode === 'letters') {
+      const categories = Object.keys(contentCategories.letters);
+      const selectedCategory = category || categories[Math.floor(Math.random() * categories.length)];
+      return contentCategories.letters[selectedCategory];
+    } else {
+      const categories = Object.keys(contentCategories.words);
+      const selectedCategory = category || categories[Math.floor(Math.random() * categories.length)];
+      return contentCategories.words[selectedCategory];
+    }
   };
 
   const getLevelConfig = (mode, level) => {
-    if (mode === 'letters') {
-      if (level <= 10) return { length: 2 + Math.floor(level/5), timing: 1500, pools: [letterPool] };
-      if (level <= 25) return { length: 3 + Math.floor(level/8), timing: 1300, pools: [letterPool, numberPool] };
-      if (level <= 40) return { length: 4 + Math.floor(level/10), timing: 1100, pools: [letterPool, numberPool] };
-      if (level <= 60) return { length: 5 + Math.floor(level/12), timing: 900, pools: [letterPool, numberPool, specialPool] };
-      if (level <= 80) return { length: 6 + Math.floor(level/15), timing: 700, pools: [letterPool, numberPool, specialPool] };
-      return { length: 8 + Math.floor(level/20), timing: 500, pools: [letterPool, numberPool, specialPool] };
+    const difficulty = calculateDynamicDifficulty();
+    const baseConfig = {
+      letters: {
+        length: Math.floor((2 + Math.floor(level/5)) * difficulty),
+        timing: Math.max(500, Math.floor((1500 - level * 20) / difficulty)),
+        pools: [getVariedContent('letters', level)]
+      },
+      words: {
+        count: Math.floor((2 + Math.floor(level/10)) * difficulty),
+        timing: Math.max(800, Math.floor((2000 - level * 30) / difficulty)),
+        wordType: level > 40 ? 'long' : level > 20 ? 'medium' : 'short'
+      }
+    };
+
+    if (activePowerUp === 'slowTime') {
+      baseConfig[mode].timing *= 1.5;
     }
-    
-    if (mode === 'words') {
-      if (level <= 20) return { count: 2 + Math.floor(level/10), timing: 2000, wordType: 'short' };
-      if (level <= 40) return { count: 3 + Math.floor(level/15), timing: 1800, wordType: 'medium' };
-      if (level <= 60) return { count: 4 + Math.floor(level/15), timing: 1500, wordType: 'long' };
-      if (level <= 80) return { count: 5 + Math.floor(level/20), timing: 1200, wordType: 'long' };
-      return { count: 6 + Math.floor(level/25), timing: 1000, wordType: 'long' };
-    }
-    
-    if (mode.startsWith('cards')) {
-      const basePairs = 4 + Math.floor(level/10);
-      const maxPairs = Math.min(24, basePairs);
-      const timeLimit = level > 50 ? 60 - Math.floor(level/10) : null;
-      return { pairs: maxPairs, timeLimit };
-    }
+
+    return baseConfig[mode] || baseConfig.letters;
   };
 
   const generateRandomString = (length, pools) => {
@@ -70,8 +178,8 @@ const MemoryChainGame = () => {
     return result;
   };
 
-  const generateWordChain = (count, wordType) => {
-    const pool = wordPools[wordType];
+  const generateWordChain = (count, category = null) => {
+    const pool = getVariedContent('words', level, category);
     const shuffled = [...pool].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, count);
   };
@@ -86,8 +194,7 @@ const MemoryChainGame = () => {
       }
     } else {
       for (let i = 0; i < pairs; i++) {
-        const config = getLevelConfig('words', Math.min(level, 50));
-        const wordChain = generateWordChain(config.count, config.wordType).join('');
+        const wordChain = generateWordChain(3).join('');
         cardPairs.push(wordChain, wordChain);
       }
     }
@@ -111,16 +218,21 @@ const MemoryChainGame = () => {
     setPlayerInput('');
     setGameStartTime(Date.now());
     setTotalCorrect(0);
+    setMultiplier(1);
+    setComboCounter(0);
+    
+    // Update session stats
+    setSessionStats(prev => ({
+      ...prev,
+      gamesPlayed: prev.gamesPlayed + 1
+    }));
     
     if (mode.startsWith('cards')) {
       const cardMode = mode.split('-')[1];
       const config = getLevelConfig(mode, 1);
-      setCards(createCards(cardMode, config.pairs));
+      setCards(createCards(cardMode, 4 + Math.floor(level/10)));
       setFlippedCards([]);
       setMatchedPairs([]);
-      if (config.timeLimit) {
-        setTimeLeft(config.timeLimit);
-      }
     } else {
       startLevel(mode, 1);
     }
@@ -133,7 +245,7 @@ const MemoryChainGame = () => {
     if (mode === 'letters') {
       newSequence = [generateRandomString(config.length, config.pools)];
     } else if (mode === 'words') {
-      newSequence = generateWordChain(config.count, config.wordType);
+      newSequence = generateWordChain(config.count);
     }
     
     setSequence(newSequence);
@@ -164,22 +276,25 @@ const MemoryChainGame = () => {
     
     if (newStreak >= 5 && !achievements.includes('streak5')) {
       newAchievements.push('streak5');
+      addNotification("🔥 Achievement Unlocked: 5-Streak Master!", 'achievement');
     }
-    if (newStreak >= 10 && !achievements.includes('streak10')) {
-      newAchievements.push('streak10');
+    if (newStreak >= 15 && !achievements.includes('streak15')) {
+      newAchievements.push('streak15');
+      addNotification("🌟 Achievement Unlocked: Streak Legend!", 'achievement');
     }
     if (levelNum >= 25 && !achievements.includes('level25')) {
       newAchievements.push('level25');
-    }
-    if (levelNum >= 50 && !achievements.includes('level50')) {
-      newAchievements.push('level50');
-    }
-    if (levelNum >= 100 && !achievements.includes('level100')) {
-      newAchievements.push('level100');
+      addNotification("🏆 Achievement Unlocked: Quarter Century!", 'achievement');
     }
     
     if (newAchievements.length > 0) {
       setAchievements([...achievements, ...newAchievements]);
+      // Award power-ups for achievements
+      setPowerUps(prev => ({
+        ...prev,
+        slowTime: prev.slowTime + 1,
+        peek: prev.peek + 1
+      }));
     }
   };
 
@@ -191,19 +306,44 @@ const MemoryChainGame = () => {
     
     if (isCorrect) {
       const streakBonus = Math.floor(streak / 5) * 10;
-      const newScore = score + (level * 10) + streakBonus;
+      const timeBonus = Math.max(0, 100 - Math.floor((Date.now() - gameStartTime) / 100));
+      const comboBonus = comboCounter * 5;
+      const totalBonus = (level * 10 + streakBonus + timeBonus + comboBonus) * multiplier;
+      
+      const newScore = score + totalBonus;
       const newStreak = streak + 1;
       const newLevel = level + 1;
       const newTotalCorrect = totalCorrect + 1;
+      const newCombo = comboCounter + 1;
       
       setScore(newScore);
       setStreak(newStreak);
       setTotalCorrect(newTotalCorrect);
+      setComboCounter(newCombo);
+      
+      // Dynamic multiplier based on performance
+      if (newStreak > 0 && newStreak % 5 === 0) {
+        setMultiplier(prev => Math.min(3, prev + 0.2));
+        showFeedback(`🚀 Multiplier increased to ${(multiplier + 0.2).toFixed(1)}x!`);
+      }
+      
+      // Encouraging feedback
+      const randomEncouragement = encouragementMessages[Math.floor(Math.random() * encouragementMessages.length)];
+      showFeedback(randomEncouragement);
+      
       checkAchievements(newScore, newStreak, newLevel);
+      
+      // Update session stats
+      setSessionStats(prev => ({
+        ...prev,
+        totalScore: prev.totalScore + totalBonus,
+        perfectRounds: prev.perfectRounds + (lives === 3 ? 1 : 0)
+      }));
       
       if (newLevel > 100) {
         setGameOver(true);
         updateBestScore(newScore);
+        addNotification("🎉 Congratulations! You've mastered all 100 levels!", 'victory');
       } else {
         setLevel(newLevel);
         startLevel(gameMode, newLevel);
@@ -212,11 +352,23 @@ const MemoryChainGame = () => {
       const newLives = lives - 1;
       setLives(newLives);
       setStreak(0);
+      setMultiplier(1);
+      setComboCounter(0);
+      
+      // Comeback detection
+      if (newLives === 1 && lives === 2) {
+        setSessionStats(prev => ({
+          ...prev,
+          comebacks: prev.comebacks + 1
+        }));
+      }
       
       if (newLives <= 0) {
         setGameOver(true);
         updateBestScore(score);
+        showFeedback("💪 Don't give up! You're getting stronger!");
       } else {
+        showFeedback(`💔 Close one! ${newLives} ${newLives === 1 ? 'life' : 'lives'} remaining.`);
         startLevel(gameMode, level);
       }
     }
@@ -237,9 +389,13 @@ const MemoryChainGame = () => {
         setTimeout(() => {
           const newMatchedPairs = [...matchedPairs, first, second];
           setMatchedPairs(newMatchedPairs);
-          const newScore = score + (level * 5);
+          const comboBonus = comboCounter * 10;
+          const newScore = score + (level * 5) + comboBonus;
           setScore(newScore);
+          setComboCounter(prev => prev + 1);
           setFlippedCards([]);
+          
+          showFeedback("✨ Perfect match!");
           
           if (newMatchedPairs.length === cards.length) {
             const newLevel = level + 1;
@@ -248,20 +404,17 @@ const MemoryChainGame = () => {
               updateBestScore(newScore);
             } else {
               setLevel(newLevel);
-              const config = getLevelConfig(gameMode, newLevel);
               const cardMode = gameMode.split('-')[1];
-              setCards(createCards(cardMode, config.pairs));
+              setCards(createCards(cardMode, 4 + Math.floor(newLevel/10)));
               setFlippedCards([]);
               setMatchedPairs([]);
-              if (config.timeLimit) {
-                setTimeLeft(config.timeLimit);
-              }
             }
           }
         }, 500);
       } else {
         setTimeout(() => {
           setFlippedCards([]);
+          setComboCounter(0);
           const newLives = lives - 1;
           setLives(newLives);
           if (newLives <= 0) {
@@ -280,6 +433,7 @@ const MemoryChainGame = () => {
         ...bestScores,
         [gameMode]: finalScore
       });
+      addNotification("🎉 New Personal Best!", 'achievement');
     }
   };
 
@@ -300,6 +454,9 @@ const MemoryChainGame = () => {
     setTimeLeft(null);
     setGameStartTime(null);
     setTotalCorrect(0);
+    setMultiplier(1);
+    setComboCounter(0);
+    setActivePowerUp(null);
   };
 
   const getGridSize = (cardCount) => {
@@ -307,6 +464,13 @@ const MemoryChainGame = () => {
     if (cardCount <= 36) return 'grid-cols-6';
     return 'grid-cols-8';
   };
+
+  // Initialize daily challenge
+  useEffect(() => {
+    if (!dailyChallenge) {
+      setDailyChallenge(generateDailyChallenge());
+    }
+  }, [dailyChallenge]);
 
   // Timer effect for card games
   useEffect(() => {
@@ -321,20 +485,101 @@ const MemoryChainGame = () => {
 
   if (gameMode === 'menu') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-xl">
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Zap className="w-8 h-8 text-purple-600" />
+      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-700 flex items-center justify-center p-4">
+        {/* Notifications */}
+        <div className="fixed top-4 right-4 z-50 space-y-2">
+          {notifications.map(notification => (
+            <div
+              key={notification.id}
+              className={`p-3 rounded-lg shadow-lg transform transition-all duration-300 ${
+                notification.type === 'achievement' ? 'bg-yellow-400 text-yellow-900' :
+                notification.type === 'victory' ? 'bg-green-400 text-green-900' :
+                'bg-blue-400 text-blue-900'
+              }`}
+            >
+              {notification.message}
             </div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">Memory Chain Pro</h1>
-            <p className="text-gray-600">100 levels of memory challenges!</p>
+          ))}
+        </div>
+
+        <div className="bg-white rounded-2xl p-8 max-w-lg w-full shadow-xl">
+          <div className="text-center mb-6">
+            <div className="w-20 h-20 bg-gradient-to-br from-purple-100 to-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Zap className="w-10 h-10 text-purple-600" />
+            </div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent mb-2">
+              Memory Chain Pro
+            </h1>
+            <p className="text-gray-600 mb-2">{getTimeBasedGreeting()}</p>
+            <p className="text-sm text-gray-500">100 levels of adaptive challenges!</p>
+          </div>
+
+          {/* Daily Challenge */}
+          {dailyChallenge && !dailyChallengeCompleted && (
+            <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 rounded-xl p-4 mb-6">
+              <div className="flex items-center gap-2 mb-2">
+                <Gift className="w-5 h-5 text-yellow-600" />
+                <span className="font-semibold text-yellow-800">Daily Challenge</span>
+              </div>
+              <p className="text-sm text-yellow-700 mb-2">{dailyChallenge.desc}</p>
+              <div className="flex justify-between items-center">
+                <div className="text-xs text-yellow-600">
+                  Progress: {dailyChallenge.progress}/{dailyChallenge.target}
+                </div>
+                <div className="text-xs text-yellow-600 font-semibold">
+                  +{dailyChallenge.reward} points
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Session Stats */}
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="bg-gray-50 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-purple-600">{sessionStats.gamesPlayed}</div>
+              <div className="text-xs text-gray-600">Games Today</div>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-blue-600">{sessionStats.perfectRounds}</div>
+              <div className="text-xs text-gray-600">Perfect Rounds</div>
+            </div>
+          </div>
+
+          {/* Power-ups */}
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <Zap className="w-5 h-5 text-indigo-600" />
+              <span className="font-semibold text-indigo-800">Power-ups</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="text-center">
+                <div className="bg-indigo-100 rounded-lg p-2 mb-1">
+                  <Clock className="w-4 h-4 text-indigo-600 mx-auto" />
+                </div>
+                <div className="text-xs text-indigo-700">Slow Time</div>
+                <div className="text-sm font-bold text-indigo-800">{powerUps.slowTime}</div>
+              </div>
+              <div className="text-center">
+                <div className="bg-indigo-100 rounded-lg p-2 mb-1">
+                  <Heart className="w-4 h-4 text-indigo-600 mx-auto" />
+                </div>
+                <div className="text-xs text-indigo-700">Extra Life</div>
+                <div className="text-sm font-bold text-indigo-800">{powerUps.extraLife}</div>
+              </div>
+              <div className="text-center">
+                <div className="bg-indigo-100 rounded-lg p-2 mb-1">
+                  <Target className="w-4 h-4 text-indigo-600 mx-auto" />
+                </div>
+                <div className="text-xs text-indigo-700">Peek</div>
+                <div className="text-sm font-bold text-indigo-800">{powerUps.peek}</div>
+              </div>
+            </div>
           </div>
           
           <div className="space-y-3 mb-6">
             <button
               onClick={() => startGame('letters')}
-              className="w-full bg-purple-500 text-white py-3 px-6 rounded-xl font-semibold hover:bg-purple-600 transition-colors flex items-center justify-between"
+              className="w-full bg-gradient-to-r from-purple-500 to-purple-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-purple-600 hover:to-purple-700 transition-all transform hover:scale-105 flex items-center justify-between shadow-lg"
             >
               <span>Letter Chains</span>
               <span className="text-sm bg-purple-400 px-2 py-1 rounded">Best: {bestScores.letters}</span>
@@ -342,7 +587,7 @@ const MemoryChainGame = () => {
             
             <button
               onClick={() => startGame('words')}
-              className="w-full bg-blue-500 text-white py-3 px-6 rounded-xl font-semibold hover:bg-blue-600 transition-colors flex items-center justify-between"
+              className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-blue-600 hover:to-blue-700 transition-all transform hover:scale-105 flex items-center justify-between shadow-lg"
             >
               <span>Word Chains</span>
               <span className="text-sm bg-blue-400 px-2 py-1 rounded">Best: {bestScores.words}</span>
@@ -350,7 +595,7 @@ const MemoryChainGame = () => {
             
             <button
               onClick={() => startGame('cards-letters')}
-              className="w-full bg-green-500 text-white py-3 px-6 rounded-xl font-semibold hover:bg-green-600 transition-colors flex items-center justify-between"
+              className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-green-600 hover:to-green-700 transition-all transform hover:scale-105 flex items-center justify-between shadow-lg"
             >
               <span>Letter Cards</span>
               <span className="text-sm bg-green-400 px-2 py-1 rounded">Best: {bestScores['cards-letters']}</span>
@@ -358,7 +603,7 @@ const MemoryChainGame = () => {
             
             <button
               onClick={() => startGame('cards-words')}
-              className="w-full bg-teal-500 text-white py-3 px-6 rounded-xl font-semibold hover:bg-teal-600 transition-colors flex items-center justify-between"
+              className="w-full bg-gradient-to-r from-teal-500 to-teal-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-teal-600 hover:to-teal-700 transition-all transform hover:scale-105 flex items-center justify-between shadow-lg"
             >
               <span>Word Cards</span>
               <span className="text-sm bg-teal-400 px-2 py-1 rounded">Best: {bestScores['cards-words']}</span>
@@ -366,21 +611,26 @@ const MemoryChainGame = () => {
           </div>
 
           {achievements.length > 0 && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+            <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Trophy className="w-5 h-5 text-yellow-600" />
-                <span className="font-semibold text-yellow-800">Achievements</span>
+                <span className="font-semibold text-yellow-800">Achievements ({achievements.length})</span>
               </div>
               <div className="flex flex-wrap gap-1">
-                {achievements.map(achievement => (
+                {achievements.slice(0, 6).map(achievement => (
                   <span key={achievement} className="bg-yellow-200 text-yellow-800 px-2 py-1 rounded text-xs">
-                    {achievement === 'streak5' && '5 Streak'}
-                    {achievement === 'streak10' && '10 Streak'}
-                    {achievement === 'level25' && 'Level 25'}
-                    {achievement === 'level50' && 'Level 50'}
-                    {achievement === 'level100' && 'Level 100'}
+                    {achievement === 'streak5' && '🔥 5-Streak'}
+                    {achievement === 'streak15' && '🌟 15-Streak'}
+                    {achievement === 'level25' && '🏆 Level 25'}
+                    {achievement === 'level50' && '💎 Level 50'}
+                    {achievement === 'level100' && '👑 Level 100'}
                   </span>
                 ))}
+                {achievements.length > 6 && (
+                  <span className="bg-yellow-200 text-yellow-800 px-2 py-1 rounded text-xs">
+                    +{achievements.length - 6} more
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -389,10 +639,40 @@ const MemoryChainGame = () => {
     );
   }
 
+  // Enhanced feedback display
+  const FeedbackDisplay = () => {
+    if (!recentFeedback) return null;
+    return (
+      <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl p-4 shadow-xl z-50 animate-pulse">
+        <div className="text-center font-bold text-lg text-purple-600">
+          {recentFeedback}
+        </div>
+      </div>
+    );
+  };
+
   if (gameMode.startsWith('cards')) {
     const cardMode = gameMode.split('-')[1];
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-600 to-blue-600 p-4">
+        <FeedbackDisplay />
+        
+        {/* Notifications */}
+        <div className="fixed top-4 right-4 z-40 space-y-2">
+          {notifications.map(notification => (
+            <div
+              key={notification.id}
+              className={`p-3 rounded-lg shadow-lg transform transition-all duration-300 ${
+                notification.type === 'achievement' ? 'bg-yellow-400 text-yellow-900' :
+                notification.type === 'victory' ? 'bg-green-400 text-green-900' :
+                'bg-blue-400 text-blue-900'
+              }`}
+            >
+              {notification.message}
+            </div>
+          ))}
+        </div>
+
         <div className="max-w-6xl mx-auto">
           <div className="bg-white rounded-2xl p-4 mb-6">
             <div className="flex justify-between items-center flex-wrap gap-4">
@@ -407,15 +687,42 @@ const MemoryChainGame = () => {
                   </div>
                 )}
                 <div className="flex items-center gap-1">
-                  {[...Array(3)].map((_, i) => (
+                  {[...Array(Math.min(5, Math.max(3, lives)))].map((_, i) => (
                     <Heart key={i} className={`w-5 h-5 ${i < lives ? 'text-red-500 fill-current' : 'text-gray-300'}`} />
                   ))}
                 </div>
                 <div className="flex items-center gap-1 text-yellow-600">
-                  <Star className="w-4 h-4" />
+                  <Flame className="w-4 h-4" />
                   <span className="font-semibold">{streak}</span>
                 </div>
+                <div className="flex items-center gap-1 text-blue-600">
+                  <TrendingUp className="w-4 h-4" />
+                  <span className="font-semibold">{multiplier.toFixed(1)}x</span>
+                </div>
                 <span className="text-lg font-semibold text-purple-600">Score: {score}</span>
+                
+                {/* Power-up buttons */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => usePowerUp('extraLife')}
+                    disabled={powerUps.extraLife <= 0}
+                    className={`p-2 rounded-lg ${powerUps.extraLife > 0 ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-300 text-gray-500'}`}
+                    title="Extra Life"
+                  >
+                    <Heart className="w-4 h-4" />
+                    <span className="text-xs">{powerUps.extraLife}</span>
+                  </button>
+                  <button
+                    onClick={() => usePowerUp('peek')}
+                    disabled={powerUps.peek <= 0}
+                    className={`p-2 rounded-lg ${powerUps.peek > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-500'}`}
+                    title="Peek"
+                  >
+                    <Target className="w-4 h-4" />
+                    <span className="text-xs">{powerUps.peek}</span>
+                  </button>
+                </div>
+                
                 <button
                   onClick={resetGame}
                   className="bg-gray-500 text-white p-2 rounded-lg hover:bg-gray-600"
@@ -427,7 +734,7 @@ const MemoryChainGame = () => {
             
             <div className="mt-2 bg-gray-200 rounded-full h-2">
               <div 
-                className="bg-purple-500 h-2 rounded-full transition-all duration-300"
+                className="bg-gradient-to-r from-purple-500 to-blue-500 h-2 rounded-full transition-all duration-300"
                 style={{ width: `${(level / 100) * 100}%` }}
               ></div>
             </div>
@@ -437,7 +744,7 @@ const MemoryChainGame = () => {
             {cards.map((card) => {
               const isFlipped = flippedCards.includes(card.id);
               const isMatched = matchedPairs.includes(card.id);
-              const showContent = isFlipped || isMatched;
+              const showContent = isFlipped || isMatched || (activePowerUp === 'peek');
               
               return (
                 <div
@@ -446,7 +753,7 @@ const MemoryChainGame = () => {
                   className={`aspect-square rounded-lg cursor-pointer transition-all duration-300 ${
                     showContent
                       ? 'bg-white shadow-lg transform scale-105'
-                      : 'bg-gray-400 hover:bg-gray-300 shadow-md'
+                      : 'bg-gradient-to-br from-gray-400 to-gray-500 hover:from-gray-300 hover:to-gray-400 shadow-md'
                   } ${isMatched ? 'ring-2 ring-green-400' : ''}`}
                 >
                   <div className="w-full h-full flex items-center justify-center p-1">
@@ -470,11 +777,12 @@ const MemoryChainGame = () => {
                 <div className="space-y-2 mb-6">
                   <p className="text-gray-600">Level Reached: {level}</p>
                   <p className="text-gray-600">Final Score: {score}</p>
+                  <p className="text-gray-600">Best Streak: {Math.max(streak, sessionStats.perfectRounds)}</p>
                   <p className="text-gray-600">Total Time: {Math.floor((Date.now() - gameStartTime) / 1000)}s</p>
                 </div>
                 <button
                   onClick={resetGame}
-                  className="bg-purple-500 text-white py-3 px-6 rounded-xl font-semibold hover:bg-purple-600"
+                  className="bg-gradient-to-r from-purple-500 to-blue-500 text-white py-3 px-6 rounded-xl font-semibold hover:from-purple-600 hover:to-blue-600"
                 >
                   Play Again
                 </button>
@@ -488,6 +796,24 @@ const MemoryChainGame = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center p-4">
+      <FeedbackDisplay />
+      
+      {/* Notifications */}
+      <div className="fixed top-4 right-4 z-40 space-y-2">
+        {notifications.map(notification => (
+          <div
+            key={notification.id}
+            className={`p-3 rounded-lg shadow-lg transform transition-all duration-300 ${
+              notification.type === 'achievement' ? 'bg-yellow-400 text-yellow-900' :
+              notification.type === 'victory' ? 'bg-green-400 text-green-900' :
+              'bg-blue-400 text-blue-900'
+            }`}
+          >
+            {notification.message}
+          </div>
+        ))}
+      </div>
+
       <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-xl">
         <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
           <h2 className="text-xl font-bold text-gray-800">
@@ -495,15 +821,42 @@ const MemoryChainGame = () => {
           </h2>
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-1">
-              {[...Array(3)].map((_, i) => (
+              {[...Array(Math.min(5, Math.max(3, lives)))].map((_, i) => (
                 <Heart key={i} className={`w-5 h-5 ${i < lives ? 'text-red-500 fill-current' : 'text-gray-300'}`} />
               ))}
             </div>
             <div className="flex items-center gap-1 text-yellow-600">
-              <Star className="w-4 h-4" />
+              <Flame className="w-4 h-4" />
               <span className="font-semibold">{streak}</span>
             </div>
+            <div className="flex items-center gap-1 text-blue-600">
+              <TrendingUp className="w-4 h-4" />
+              <span className="font-semibold">{multiplier.toFixed(1)}x</span>
+            </div>
             <span className="text-lg font-semibold text-purple-600">Score: {score}</span>
+            
+            {/* Power-up buttons */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => usePowerUp('slowTime')}
+                disabled={powerUps.slowTime <= 0 || activePowerUp === 'slowTime'}
+                className={`p-2 rounded-lg ${powerUps.slowTime > 0 && activePowerUp !== 'slowTime' ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-500'}`}
+                title="Slow Time"
+              >
+                <Clock className="w-4 h-4" />
+                <span className="text-xs">{powerUps.slowTime}</span>
+              </button>
+              <button
+                onClick={() => usePowerUp('extraLife')}
+                disabled={powerUps.extraLife <= 0 || lives >= 5}
+                className={`p-2 rounded-lg ${powerUps.extraLife > 0 && lives < 5 ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-300 text-gray-500'}`}
+                title="Extra Life"
+              >
+                <Heart className="w-4 h-4" />
+                <span className="text-xs">{powerUps.extraLife}</span>
+              </button>
+            </div>
+            
             <button
               onClick={resetGame}
               className="bg-gray-500 text-white p-2 rounded-lg hover:bg-gray-600"
@@ -515,7 +868,7 @@ const MemoryChainGame = () => {
 
         <div className="mb-4 bg-gray-200 rounded-full h-2">
           <div 
-            className="bg-purple-500 h-2 rounded-full transition-all duration-300"
+            className="bg-gradient-to-r from-purple-500 to-blue-500 h-2 rounded-full transition-all duration-300"
             style={{ width: `${(level / 100) * 100}%` }}
           ></div>
         </div>
@@ -523,13 +876,16 @@ const MemoryChainGame = () => {
         {showingSequence ? (
           <div className="text-center">
             <p className="text-gray-600 mb-6">Watch and memorize:</p>
-            <div className="bg-gray-100 p-8 rounded-xl mb-6">
+            <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-8 rounded-xl mb-6 border-2 border-purple-200">
               <div className="text-3xl font-bold text-gray-800 min-h-[60px] flex items-center justify-center">
                 {currentIndex >= 0 && sequence[currentIndex]}
               </div>
             </div>
-            <div className="text-sm text-gray-500">
-              {currentIndex + 1} of {sequence.length}
+            <div className="flex justify-between items-center text-sm text-gray-500">
+              <span>{currentIndex + 1} of {sequence.length}</span>
+              {activePowerUp === 'slowTime' && (
+                <span className="text-blue-600 font-semibold">⏰ Slow Time Active</span>
+              )}
             </div>
           </div>
         ) : gameOver ? (
@@ -540,7 +896,8 @@ const MemoryChainGame = () => {
             <div className="space-y-2 mb-6">
               <p className="text-gray-600">Level Reached: {level}</p>
               <p className="text-gray-600">Final Score: {score}</p>
-              <p className="text-gray-600">Accuracy: {Math.round((totalCorrect / (totalCorrect + (3 - lives))) * 100)}%</p>
+              <p className="text-gray-600">Best Streak: {Math.max(streak, sessionStats.perfectRounds)}</p>
+              <p className="text-gray-600">Accuracy: {Math.round((totalCorrect / (totalCorrect + (3 - lives) + 1)) * 100)}%</p>
               <p className="text-gray-600">Total Time: {Math.floor((Date.now() - gameStartTime) / 1000)}s</p>
             </div>
             <p className="text-sm text-gray-500 mb-6 font-mono bg-gray-100 p-3 rounded">
@@ -548,7 +905,7 @@ const MemoryChainGame = () => {
             </p>
             <button
               onClick={resetGame}
-              className="bg-purple-500 text-white py-3 px-6 rounded-xl font-semibold hover:bg-purple-600"
+              className="bg-gradient-to-r from-purple-500 to-blue-500 text-white py-3 px-6 rounded-xl font-semibold hover:from-purple-600 hover:to-blue-600"
             >
               Play Again
             </button>
@@ -569,13 +926,14 @@ const MemoryChainGame = () => {
             />
             <button
               onClick={handleSubmit}
-              className="w-full bg-green-500 text-white py-3 px-6 rounded-xl font-semibold hover:bg-green-600 mb-4"
+              className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-green-600 hover:to-green-700 mb-4"
             >
               Submit
             </button>
             <div className="flex justify-between text-sm text-gray-500">
               <span>Sequence length: {sequence.length}</span>
-              <span>Streak bonus: +{Math.floor(streak / 5) * 10}</span>
+              <span>Combo: {comboCounter}</span>
+              <span>Multiplier: {multiplier.toFixed(1)}x</span>
             </div>
           </div>
         )}
